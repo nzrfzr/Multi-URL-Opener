@@ -1,6 +1,6 @@
 /**
- * Multi URL Opener - Popup Script (Milestone 3)
- * Full list management, background tab launching, and progress tracking.
+ * Multi URL Opener - Popup Script (Milestones 3, 4, 5)
+ * List management, queue mode configuration, progress tracking, and pause/resume/stop controls.
  * by nzrfzr
  */
 
@@ -40,7 +40,10 @@ const elements = {
   progRemaining: document.getElementById('progRemaining'),
   progLoading: document.getElementById('progLoading'),
   readyActions: document.getElementById('readyActions'),
-  runningActions: document.getElementById('runningActions')
+  runningActions: document.getElementById('runningActions'),
+  btnPauseQueue: document.getElementById('btnPauseQueue'),
+  btnResumeQueue: document.getElementById('btnResumeQueue'),
+  btnStopQueue: document.getElementById('btnStopQueue')
 };
 
 // Local UI state
@@ -101,6 +104,7 @@ async function init() {
   renderList();
   updateStats();
   updateProgressUI();
+  updateActionButtons();
 }
 
 /**
@@ -122,6 +126,7 @@ async function refreshState() {
       renderList();
       updateStats();
       updateProgressUI();
+      updateActionButtons();
 
       // If running, ensure polling timer is active
       if (state.session?.status === SESSION_STATUS.RUNNING) {
@@ -136,7 +141,7 @@ async function refreshState() {
 }
 
 /**
- * Poll background state while a queue/opening is active
+ * Poll background state while a queue is active
  */
 function startPolling() {
   if (pollTimer) return;
@@ -216,6 +221,19 @@ function bindEvents() {
   elements.btnOpenSelected?.addEventListener('click', () => {
     handleStartOpening();
   });
+
+  // Queue Controls: Pause, Resume, Stop
+  elements.btnPauseQueue?.addEventListener('click', () => {
+    handlePauseQueue();
+  });
+
+  elements.btnResumeQueue?.addEventListener('click', () => {
+    handleResumeQueue();
+  });
+
+  elements.btnStopQueue?.addEventListener('click', () => {
+    handleStopQueue();
+  });
 }
 
 /**
@@ -235,12 +253,62 @@ async function handleStartOpening() {
       await refreshState();
       startPolling();
     } else {
-      showInputFeedback(response?.error || 'Failed to start opening');
+      showInputFeedback(response?.error || 'Failed to start queue');
       if (elements.btnOpenSelected) elements.btnOpenSelected.disabled = false;
     }
   } catch (err) {
-    console.error('[MultiURLOpener] Start opening error:', err);
+    console.error('[MultiURLOpener] Start queue error:', err);
     if (elements.btnOpenSelected) elements.btnOpenSelected.disabled = false;
+  }
+}
+
+/**
+ * Handle Pause Queue
+ */
+async function handlePauseQueue() {
+  try {
+    const response = await browserAdapter.runtime.sendMessage({
+      type: MESSAGE_TYPES.PAUSE_QUEUE
+    });
+    if (response && response.success) {
+      await refreshState();
+    }
+  } catch (err) {
+    console.error('[MultiURLOpener] Pause queue error:', err);
+  }
+}
+
+/**
+ * Handle Resume Queue
+ */
+async function handleResumeQueue() {
+  try {
+    const response = await browserAdapter.runtime.sendMessage({
+      type: MESSAGE_TYPES.RESUME_QUEUE
+    });
+    if (response && response.success) {
+      await refreshState();
+      startPolling();
+    }
+  } catch (err) {
+    console.error('[MultiURLOpener] Resume queue error:', err);
+  }
+}
+
+/**
+ * Handle Stop Queue
+ */
+async function handleStopQueue() {
+  try {
+    const response = await browserAdapter.runtime.sendMessage({
+      type: MESSAGE_TYPES.STOP_QUEUE
+    });
+    if (response && response.success) {
+      await refreshState();
+      stopPolling();
+    }
+  } catch (err) {
+    console.error('[MultiURLOpener] Stop queue error:', err);
   }
 }
 
@@ -328,6 +396,11 @@ async function handleDeleteSelected() {
 async function handleClearList() {
   if (state.rows.length === 0) return;
 
+  if (state.session?.status === SESSION_STATUS.RUNNING) {
+    showInputFeedback('Stop queue before clearing list.');
+    return;
+  }
+
   try {
     const response = await browserAdapter.runtime.sendMessage({
       type: MESSAGE_TYPES.CLEAR_LIST
@@ -403,16 +476,15 @@ function renderList() {
   }
 
   elements.emptyState.classList.add('hidden');
+  const isRunning = state.session?.status === SESSION_STATUS.RUNNING;
   if (elements.chkSelectAll) {
-    elements.chkSelectAll.disabled = state.session?.status === SESSION_STATUS.RUNNING;
+    elements.chkSelectAll.disabled = isRunning;
   }
 
   // Clear existing rows safely
   while (elements.urlTableBody.firstChild) {
     elements.urlTableBody.removeChild(elements.urlTableBody.firstChild);
   }
-
-  const isRunning = state.session?.status === SESSION_STATUS.RUNNING;
 
   // Build rows using safe DOM APIs
   state.rows.forEach((row, index) => {
@@ -478,6 +550,11 @@ function renderList() {
         badge.classList.add('badge-timed-out');
         badge.textContent = 'Timeout';
         badge.title = 'Navigation timed out.';
+        break;
+      case ROW_STATUS.STOPPED:
+        badge.classList.add('badge-invalid');
+        badge.textContent = 'Stopped';
+        badge.title = 'Skipped / stopped.';
         break;
       case ROW_STATUS.QUEUED:
         badge.classList.add('badge-ready');
@@ -588,7 +665,15 @@ function updateProgressUI() {
   const s = state.session;
   if (!elements.progressSection) return;
 
-  if (s && s.totalCount > 0 && (s.status === SESSION_STATUS.RUNNING || s.status === SESSION_STATUS.COMPLETED || s.status === SESSION_STATUS.COMPLETED_WITH_ERRORS)) {
+  const showProgress = s && s.totalCount > 0 && (
+    s.status === SESSION_STATUS.RUNNING || 
+    s.status === SESSION_STATUS.PAUSED || 
+    s.status === SESSION_STATUS.STOPPED || 
+    s.status === SESSION_STATUS.COMPLETED || 
+    s.status === SESSION_STATUS.COMPLETED_WITH_ERRORS
+  );
+
+  if (showProgress) {
     elements.progressSection.classList.remove('hidden');
 
     const processed = (s.successCount || 0) + (s.failedCount || 0);
@@ -609,6 +694,29 @@ function updateProgressUI() {
     if (elements.progLoading) elements.progLoading.textContent = state.activeNavigationsCount || 0;
   } else {
     elements.progressSection.classList.add('hidden');
+  }
+}
+
+/**
+ * Update the visibility and state of Pause / Resume / Stop action buttons
+ */
+function updateActionButtons() {
+  const status = state.session?.status;
+
+  if (status === SESSION_STATUS.RUNNING) {
+    elements.readyActions?.classList.add('hidden');
+    elements.runningActions?.classList.remove('hidden');
+    elements.btnPauseQueue?.classList.remove('hidden');
+    elements.btnResumeQueue?.classList.add('hidden');
+  } else if (status === SESSION_STATUS.PAUSED) {
+    elements.readyActions?.classList.add('hidden');
+    elements.runningActions?.classList.remove('hidden');
+    elements.btnPauseQueue?.classList.add('hidden');
+    elements.btnResumeQueue?.classList.remove('hidden');
+  } else {
+    // READY, STOPPED, COMPLETED, COMPLETED_WITH_ERRORS
+    elements.readyActions?.classList.remove('hidden');
+    elements.runningActions?.classList.add('hidden');
   }
 }
 
@@ -653,6 +761,10 @@ function setStatus(statusKey) {
     case SESSION_STATUS.PAUSED:
       elements.sessionStatusPill.classList.add('status-paused');
       elements.sessionStatusText.textContent = 'Paused';
+      break;
+    case SESSION_STATUS.STOPPED:
+      elements.sessionStatusPill.classList.add('status-paused');
+      elements.sessionStatusText.textContent = 'Stopped';
       break;
     case SESSION_STATUS.COMPLETED:
       elements.sessionStatusPill.classList.add('status-completed');

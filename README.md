@@ -3,7 +3,7 @@
 **Developer:** `nzrfzr`  
 **Target browsers:** Google Chrome & Mozilla Firefox  
 **License / Type:** Personal, local-first browser extension  
-**Status:** Milestone 3 (Basic Tab Creation) completed  
+**Status:** Milestones 4 & 5 (Queue Modes, Concurrency, and Queue Controls) completed  
 
 ---
 
@@ -60,8 +60,8 @@ This extension requests only the minimum required permissions:
 - [x] **Milestone 1 — Extension Shell:** Manifest V3 cross-browser setup, compact white UI, header, status pill, background messaging handshake, and icons.
 - [x] **Milestone 2 — URL Parsing & List Management:** Mixed-text extraction, HTTP/HTTPS validation, duplicate detection, row selection, metrics.
 - [x] **Milestone 3 — Basic Tab Creation:** Background tab opening, tab ID mapping, load vs. creation tracking.
-- [ ] **Milestone 4 — Queue Modes & Concurrency:** Open All, At Interval, After Load with concurrency limit (1–10) and timeout.
-- [ ] **Milestone 5 — Queue Controls & Progress:** Pause, resume, stop, and real-time progress indicators.
+- [x] **Milestone 4 — Queue Modes & Concurrency:** Open All, At Interval, After Load with concurrency limit (1–10) and timeout.
+- [x] **Milestone 5 — Queue Controls & Progress:** Pause, resume, stop, and real-time progress indicators.
 - [ ] **Milestone 6 — Local Persistence & Worker Recovery:** Background persistence across popup close and worker suspension.
 - [ ] **Milestone 7 — Deferred Navigation:** Optional "Don't load until selected" managed tabs.
 - [ ] **Milestone 8 — Final Polish & Accessibility:** Keyboard navigation, full manual cross-browser testing.
