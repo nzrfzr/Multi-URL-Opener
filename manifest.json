@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Multi URL Opener",
+  "version": "0.1.0",
+  "description": "Collect, validate, and open multiple URLs with controlled concurrency and intervals.",
+  "author": "nzrfzr",
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Multi URL Opener",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background/background.js",
+    "scripts": ["background/background.js"],
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "multi-url-opener@nzrfzr",
+      "strict_min_version": "115.0"
+    }
+  }
+}

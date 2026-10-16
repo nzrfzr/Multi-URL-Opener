@@ -1,0 +1,16 @@
+# Ignore documentation/specification folder as requested
+markdown/
+
+# OS metadata
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Editor directories
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

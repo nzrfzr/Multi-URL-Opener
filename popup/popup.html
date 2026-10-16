@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multi URL Opener</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <img src="../icons/icon-32.png" alt="" class="brand-icon" width="22" height="22">
+        <div class="brand-text">
+          <h1 class="brand-title">Multi URL Opener</h1>
+          <span class="brand-credit">by nzrfzr</span>
+        </div>
+      </div>
+      <div class="header-status">
+        <span id="sessionStatusPill" class="status-pill status-ready">
+          <span class="status-indicator"></span>
+          <span id="sessionStatusText">Ready</span>
+        </span>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="app-main">
+      <!-- Input Section -->
+      <section class="section input-section" aria-label="URL Input">
+        <div class="section-header">
+          <label for="urlInput" class="section-label">Input URLs</label>
+          <div class="section-actions">
+            <button type="button" id="btnExtract" class="btn btn-secondary btn-xs" title="Find and extract HTTP/HTTPS URLs from mixed text">
+              <svg class="icon-svg" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="currentColor">
+                <path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/>
+                <path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/>
+              </svg>
+              Extract from text
+            </button>
+            <button type="button" id="btnAddUrls" class="btn btn-primary btn-xs" title="Add URLs to list">
+              Add to list
+            </button>
+          </div>
+        </div>
+        <textarea 
+          id="urlInput" 
+          class="url-textarea" 
+          rows="3" 
+          placeholder="Paste URLs here, one per line..."
+          aria-label="Paste URLs here, one per line"
+          spellcheck="false"
+        ></textarea>
+      </section>
+
+      <!-- URL List Section -->
+      <section class="section list-section" aria-label="URL List">
+        <div class="list-toolbar">
+          <div class="toolbar-left">
+            <label class="checkbox-container select-all-label">
+              <input type="checkbox" id="chkSelectAll" aria-label="Select or deselect all URLs">
+              <span class="toolbar-label">Select all</span>
+            </label>
+          </div>
+          <div class="toolbar-right">
+            <button type="button" id="btnDeleteSelected" class="btn-link btn-danger-link" title="Remove selected rows from list">Delete selected</button>
+            <span class="divider">|</span>
+            <button type="button" id="btnClearList" class="btn-link btn-danger-link" title="Clear all rows">Clear all</button>
+          </div>
+        </div>
+
+        <!-- Table / List Area -->
+        <div class="table-container" id="tableContainer">
+          <table class="url-table" id="urlTable" aria-label="URLs to open">
+            <thead>
+              <tr>
+                <th class="col-check" scope="col"><span class="sr-only">Select</span></th>
+                <th class="col-num" scope="col">#</th>
+                <th class="col-url" scope="col">URL</th>
+                <th class="col-status" scope="col">Status</th>
+                <th class="col-action" scope="col"><span class="sr-only">Action</span></th>
+              </tr>
+            </thead>
+            <tbody id="urlTableBody">
+              <!-- Rendered via JavaScript -->
+            </tbody>
+          </table>
+
+          <!-- Empty State -->
+          <div id="emptyState" class="empty-state">
+            <svg class="empty-icon" viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+            </svg>
+            <p class="empty-title">No URLs in list</p>
+            <p class="empty-desc">Paste URLs above and click "Add to list" or extract from text.</p>
+          </div>
+        </div>
+
+        <!-- Stats Bar -->
+        <div class="stats-bar" aria-label="Statistics">
+          <div class="stat-badge">
+            <span class="stat-label">Total:</span>
+            <span id="statTotal" class="stat-value">0</span>
+          </div>
+          <div class="stat-badge stat-valid">
+            <span class="stat-label">Valid:</span>
+            <span id="statValid" class="stat-value">0</span>
+          </div>
+          <div class="stat-badge stat-duplicate">
+            <span class="stat-label">Duplicate:</span>
+            <span id="statDuplicate" class="stat-value">0</span>
+          </div>
+          <div class="stat-badge stat-invalid">
+            <span class="stat-label">Invalid:</span>
+            <span id="statInvalid" class="stat-value">0</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Opening Settings Section -->
+      <section class="section settings-section" aria-label="Opening Controls">
+        <div class="settings-grid">
+          <!-- Mode Selector -->
+          <div class="form-group">
+            <label for="selectMode" class="form-label">Open Mode</label>
+            <select id="selectMode" class="form-select">
+              <option value="at_interval">At Interval</option>
+              <option value="open_all">Open All</option>
+              <option value="after_load">After Load</option>
+            </select>
+          </div>
+
+          <!-- Concurrency Limit -->
+          <div class="form-group">
+            <label for="inputConcurrency" class="form-label">
+              Limit Tab
+              <span class="label-hint" title="Max concurrent navigations in progress">(concurrent)</span>
+            </label>
+            <input type="number" id="inputConcurrency" class="form-input" min="1" max="10" value="3">
+          </div>
+
+          <!-- Interval Setting (conditional for At Interval) -->
+          <div class="form-group" id="intervalGroup">
+            <label for="inputInterval" class="form-label">Interval (sec)</label>
+            <input type="number" id="inputInterval" class="form-input" min="0.5" max="60" step="0.5" value="2">
+          </div>
+        </div>
+
+        <!-- Collapsible Additional Settings -->
+        <details class="additional-settings" id="additionalSettings">
+          <summary class="settings-summary">
+            <span>Additional settings</span>
+          </summary>
+          <div class="additional-options">
+            <div class="option-row">
+              <label for="inputTimeout" class="form-label-inline">Navigation timeout (sec):</label>
+              <input type="number" id="inputTimeout" class="form-input form-input-sm" min="5" max="300" value="30">
+            </div>
+            <div class="option-row">
+              <label class="checkbox-container">
+                <input type="checkbox" id="chkBackground" checked>
+                <span>Open tabs in background</span>
+              </label>
+            </div>
+            <div class="option-row">
+              <label class="checkbox-container">
+                <input type="checkbox" id="chkDeferUntilSelected">
+                <span>Don't load until selected (managed tabs)</span>
+              </label>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <!-- Progress Section (Dynamic) -->
+      <section class="section progress-section hidden" id="progressSection" aria-label="Queue Progress">
+        <div class="progress-header">
+          <span class="progress-title">Queue Progress</span>
+          <span class="progress-fraction" id="progressFraction">0 / 0</span>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" id="progressBarFill" style="width: 0%;"></div>
+        </div>
+        <div class="progress-metrics">
+          <span class="metric-item">Success: <strong id="progSuccess" class="text-success">0</strong></span>
+          <span class="metric-item">Failed: <strong id="progFailed" class="text-danger">0</strong></span>
+          <span class="metric-item">Remaining: <strong id="progRemaining">0</strong></span>
+          <span class="metric-item">Loading: <strong id="progLoading" class="text-primary">0</strong></span>
+        </div>
+      </section>
+
+      <!-- Actions -->
+      <div class="action-footer">
+        <!-- Ready Actions -->
+        <div id="readyActions" class="action-buttons">
+          <button type="button" id="btnOpenSelected" class="btn btn-primary btn-block" disabled>
+            Open Selected URLs
+          </button>
+        </div>
+
+        <!-- Running Actions -->
+        <div id="runningActions" class="action-buttons hidden">
+          <button type="button" id="btnPauseQueue" class="btn btn-secondary flex-1">Pause</button>
+          <button type="button" id="btnResumeQueue" class="btn btn-primary flex-1 hidden">Resume</button>
+          <button type="button" id="btnStopQueue" class="btn btn-danger flex-1">Stop</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <span>Multi URL Opener &middot; by nzrfzr</span>
+    </footer>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
