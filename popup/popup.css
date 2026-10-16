@@ -367,13 +367,25 @@ textarea:focus-visible {
   color: var(--text-muted);
 }
 
+.badge-creating, .badge-loading {
+  background-color: var(--primary-soft-bg);
+  border: 1px solid var(--primary-soft);
+  color: var(--primary-hover);
+}
+
+.badge-success {
+  background-color: var(--success-soft-bg);
+  border: 1px solid #C8E6C9;
+  color: var(--success);
+}
+
 .badge-duplicate {
   background-color: var(--primary-soft-bg);
   border: 1px solid var(--primary-soft);
   color: var(--primary-hover);
 }
 
-.badge-invalid {
+.badge-invalid, .badge-failed, .badge-timed-out {
   background-color: var(--danger-soft-bg);
   border: 1px solid #FFCDD2;
   color: var(--danger);

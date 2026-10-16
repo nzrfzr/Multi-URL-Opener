@@ -1,10 +1,10 @@
 /**
- * Multi URL Opener - Popup Script (Milestone 2)
- * Manages URL list interactions, extraction, selection, and statistics.
+ * Multi URL Opener - Popup Script (Milestone 3)
+ * Full list management, background tab launching, and progress tracking.
  * by nzrfzr
  */
 
-import { MESSAGE_TYPES, SESSION_STATUS, OPEN_MODE, DEFAULTS } from '../src/constants.js';
+import { MESSAGE_TYPES, SESSION_STATUS, ROW_STATUS, OPEN_MODE, DEFAULTS } from '../src/constants.js';
 import { browserAdapter } from '../src/browser-adapter.js';
 
 // DOM Elements
@@ -33,6 +33,12 @@ const elements = {
   chkDeferUntilSelected: document.getElementById('chkDeferUntilSelected'),
   btnOpenSelected: document.getElementById('btnOpenSelected'),
   progressSection: document.getElementById('progressSection'),
+  progressFraction: document.getElementById('progressFraction'),
+  progressBarFill: document.getElementById('progressBarFill'),
+  progSuccess: document.getElementById('progSuccess'),
+  progFailed: document.getElementById('progFailed'),
+  progRemaining: document.getElementById('progRemaining'),
+  progLoading: document.getElementById('progLoading'),
   readyActions: document.getElementById('readyActions'),
   runningActions: document.getElementById('runningActions')
 };
@@ -57,9 +63,17 @@ let state = {
     selectedValid: 0
   },
   session: {
-    status: SESSION_STATUS.READY
-  }
+    id: null,
+    status: SESSION_STATUS.READY,
+    openedCount: 0,
+    successCount: 0,
+    failedCount: 0,
+    totalCount: 0
+  },
+  activeNavigationsCount: 0
 };
+
+let pollTimer = null;
 
 /**
  * Initialize popup
@@ -75,19 +89,7 @@ async function init() {
     });
 
     if (pingResponse && pingResponse.success) {
-      setStatus(SESSION_STATUS.READY);
-
-      const stateResponse = await browserAdapter.runtime.sendMessage({
-        type: MESSAGE_TYPES.GET_STATE
-      });
-
-      if (stateResponse && stateResponse.success && stateResponse.payload) {
-        state = {
-          ...state,
-          ...stateResponse.payload
-        };
-        applyPreferencesToUI(state.preferences);
-      }
+      await refreshState();
     } else {
       setStatus('disconnected');
     }
@@ -98,6 +100,54 @@ async function init() {
 
   renderList();
   updateStats();
+  updateProgressUI();
+}
+
+/**
+ * Fetch latest state from background
+ */
+async function refreshState() {
+  try {
+    const response = await browserAdapter.runtime.sendMessage({
+      type: MESSAGE_TYPES.GET_STATE
+    });
+
+    if (response && response.success && response.payload) {
+      state = {
+        ...state,
+        ...response.payload
+      };
+      applyPreferencesToUI(state.preferences);
+      setStatus(state.session?.status || SESSION_STATUS.READY);
+      renderList();
+      updateStats();
+      updateProgressUI();
+
+      // If running, ensure polling timer is active
+      if (state.session?.status === SESSION_STATUS.RUNNING) {
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    }
+  } catch (err) {
+    console.debug('[MultiURLOpener] Refresh state error:', err);
+  }
+}
+
+/**
+ * Poll background state while a queue/opening is active
+ */
+function startPolling() {
+  if (pollTimer) return;
+  pollTimer = setInterval(refreshState, 600);
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
 }
 
 /**
@@ -161,11 +211,41 @@ function bindEvents() {
   elements.btnClearList?.addEventListener('click', () => {
     handleClearList();
   });
+
+  // Primary action button (Open Selected URLs)
+  elements.btnOpenSelected?.addEventListener('click', () => {
+    handleStartOpening();
+  });
+}
+
+/**
+ * Trigger queue start in background
+ */
+async function handleStartOpening() {
+  if (elements.btnOpenSelected) {
+    elements.btnOpenSelected.disabled = true;
+  }
+
+  try {
+    const response = await browserAdapter.runtime.sendMessage({
+      type: MESSAGE_TYPES.START_QUEUE
+    });
+
+    if (response && response.success) {
+      await refreshState();
+      startPolling();
+    } else {
+      showInputFeedback(response?.error || 'Failed to start opening');
+      if (elements.btnOpenSelected) elements.btnOpenSelected.disabled = false;
+    }
+  } catch (err) {
+    console.error('[MultiURLOpener] Start opening error:', err);
+    if (elements.btnOpenSelected) elements.btnOpenSelected.disabled = false;
+  }
 }
 
 /**
  * Handle adding URLs either as newline-separated list or mixed-text extraction
- * @param {boolean} isExtractMode 
  */
 async function handleAddUrls(isExtractMode) {
   const text = elements.urlInput.value.trim();
@@ -202,7 +282,6 @@ async function handleAddUrls(isExtractMode) {
 
 /**
  * Handle select/deselect all rows
- * @param {boolean} isChecked 
  */
 async function handleSelectAllToggle(isChecked) {
   try {
@@ -267,7 +346,6 @@ async function handleClearList() {
 
 /**
  * Handle deleting a single row by ID
- * @param {string} id 
  */
 async function handleDeleteRow(id) {
   try {
@@ -289,8 +367,6 @@ async function handleDeleteRow(id) {
 
 /**
  * Handle changing selection of a single row
- * @param {string} id 
- * @param {boolean} selected 
  */
 async function handleToggleRowSelection(id, selected) {
   try {
@@ -328,13 +404,15 @@ function renderList() {
 
   elements.emptyState.classList.add('hidden');
   if (elements.chkSelectAll) {
-    elements.chkSelectAll.disabled = false;
+    elements.chkSelectAll.disabled = state.session?.status === SESSION_STATUS.RUNNING;
   }
 
   // Clear existing rows safely
   while (elements.urlTableBody.firstChild) {
     elements.urlTableBody.removeChild(elements.urlTableBody.firstChild);
   }
+
+  const isRunning = state.session?.status === SESSION_STATUS.RUNNING;
 
   // Build rows using safe DOM APIs
   state.rows.forEach((row, index) => {
@@ -348,6 +426,7 @@ function renderList() {
     const chk = document.createElement('input');
     chk.type = 'checkbox';
     chk.checked = Boolean(row.selected);
+    chk.disabled = isRunning;
     chk.setAttribute('aria-label', `Select URL ${index + 1}`);
     chk.addEventListener('change', (e) => {
       tr.classList.toggle('row-selected', e.target.checked);
@@ -374,17 +453,51 @@ function renderList() {
     const badge = document.createElement('span');
     badge.className = 'badge';
 
-    if (!row.valid) {
-      badge.classList.add('badge-invalid');
-      badge.textContent = 'Invalid';
-      badge.title = row.error || 'Invalid URL syntax';
-    } else if (row.duplicateOf) {
-      badge.classList.add('badge-duplicate');
-      badge.textContent = 'Duplicate';
-      badge.title = 'Duplicate of an earlier URL';
-    } else {
-      badge.classList.add('badge-ready');
-      badge.textContent = 'Ready';
+    switch (row.status) {
+      case ROW_STATUS.CREATING_TAB:
+        badge.classList.add('badge-creating');
+        badge.textContent = 'Opening';
+        badge.title = 'Tab is being created...';
+        break;
+      case ROW_STATUS.LOADING:
+        badge.classList.add('badge-loading');
+        badge.textContent = 'Loading';
+        badge.title = 'Page is loading in background tab...';
+        break;
+      case ROW_STATUS.SUCCESS:
+        badge.classList.add('badge-success');
+        badge.textContent = 'Loaded';
+        badge.title = 'Page navigation completed successfully.';
+        break;
+      case ROW_STATUS.FAILED:
+        badge.classList.add('badge-failed');
+        badge.textContent = 'Failed';
+        badge.title = row.error || 'Navigation failed or tab was closed prematurely.';
+        break;
+      case ROW_STATUS.TIMED_OUT:
+        badge.classList.add('badge-timed-out');
+        badge.textContent = 'Timeout';
+        badge.title = 'Navigation timed out.';
+        break;
+      case ROW_STATUS.QUEUED:
+        badge.classList.add('badge-ready');
+        badge.textContent = 'Queued';
+        badge.title = 'Waiting in queue...';
+        break;
+      default:
+        if (!row.valid) {
+          badge.classList.add('badge-invalid');
+          badge.textContent = 'Invalid';
+          badge.title = row.error || 'Invalid URL syntax';
+        } else if (row.duplicateOf) {
+          badge.classList.add('badge-duplicate');
+          badge.textContent = 'Duplicate';
+          badge.title = 'Duplicate of an earlier URL';
+        } else {
+          badge.classList.add('badge-ready');
+          badge.textContent = 'Ready';
+        }
+        break;
     }
     tdStatus.appendChild(badge);
 
@@ -397,6 +510,7 @@ function renderList() {
     btnDel.setAttribute('aria-label', `Remove URL ${index + 1}`);
     btnDel.title = 'Remove';
     btnDel.textContent = '×';
+    btnDel.disabled = isRunning;
     btnDel.addEventListener('click', (e) => {
       e.stopPropagation();
       handleDeleteRow(row.id);
@@ -431,6 +545,8 @@ function updateStats() {
   if (elements.statDuplicate) elements.statDuplicate.textContent = stats.duplicate;
   if (elements.statInvalid) elements.statInvalid.textContent = stats.invalid;
 
+  const isRunning = state.session?.status === SESSION_STATUS.RUNNING;
+
   // Update Select All checkbox tri-state
   if (elements.chkSelectAll && stats.total > 0) {
     if (stats.selected === stats.total) {
@@ -448,7 +564,13 @@ function updateStats() {
   // Enable/disable Open Selected URLs button
   if (elements.btnOpenSelected) {
     const hasSelectedValid = stats.selectedValid > 0;
-    elements.btnOpenSelected.disabled = !hasSelectedValid;
+    elements.btnOpenSelected.disabled = !hasSelectedValid || isRunning;
+    if (isRunning) {
+      elements.btnOpenSelected.textContent = 'Opening in progress...';
+    } else {
+      elements.btnOpenSelected.textContent = 'Open Selected URLs';
+    }
+
     if (!hasSelectedValid) {
       elements.btnOpenSelected.title = stats.total === 0 
         ? 'Add URLs to open' 
@@ -460,8 +582,38 @@ function updateStats() {
 }
 
 /**
+ * Update the queue progress area
+ */
+function updateProgressUI() {
+  const s = state.session;
+  if (!elements.progressSection) return;
+
+  if (s && s.totalCount > 0 && (s.status === SESSION_STATUS.RUNNING || s.status === SESSION_STATUS.COMPLETED || s.status === SESSION_STATUS.COMPLETED_WITH_ERRORS)) {
+    elements.progressSection.classList.remove('hidden');
+
+    const processed = (s.successCount || 0) + (s.failedCount || 0);
+    const total = s.totalCount || 1;
+    const percent = Math.min(100, Math.round((processed / total) * 100));
+
+    if (elements.progressFraction) {
+      elements.progressFraction.textContent = `${processed} / ${total} (Opened: ${s.openedCount || 0})`;
+    }
+
+    if (elements.progressBarFill) {
+      elements.progressBarFill.style.width = `${percent}%`;
+    }
+
+    if (elements.progSuccess) elements.progSuccess.textContent = s.successCount || 0;
+    if (elements.progFailed) elements.progFailed.textContent = s.failedCount || 0;
+    if (elements.progRemaining) elements.progRemaining.textContent = Math.max(0, total - processed);
+    if (elements.progLoading) elements.progLoading.textContent = state.activeNavigationsCount || 0;
+  } else {
+    elements.progressSection.classList.add('hidden');
+  }
+}
+
+/**
  * Show temporary feedback in the URL input area
- * @param {string} msg 
  */
 function showInputFeedback(msg) {
   const orig = elements.urlInput.placeholder;
