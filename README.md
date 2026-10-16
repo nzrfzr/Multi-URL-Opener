@@ -3,7 +3,7 @@
 **Developer:** `nzrfzr`  
 **Target browsers:** Google Chrome & Mozilla Firefox  
 **License / Type:** Personal, local-first browser extension  
-**Status:** Milestones 4 & 5 (Queue Modes, Concurrency, and Queue Controls) completed  
+**Status:** All Milestones (1–8) completed · Ready for personal testing  
 
 ---
 
@@ -62,6 +62,6 @@ This extension requests only the minimum required permissions:
 - [x] **Milestone 3 — Basic Tab Creation:** Background tab opening, tab ID mapping, load vs. creation tracking.
 - [x] **Milestone 4 — Queue Modes & Concurrency:** Open All, At Interval, After Load with concurrency limit (1–10) and timeout.
 - [x] **Milestone 5 — Queue Controls & Progress:** Pause, resume, stop, and real-time progress indicators.
-- [ ] **Milestone 6 — Local Persistence & Worker Recovery:** Background persistence across popup close and worker suspension.
-- [ ] **Milestone 7 — Deferred Navigation:** Optional "Don't load until selected" managed tabs.
-- [ ] **Milestone 8 — Final Polish & Accessibility:** Keyboard navigation, full manual cross-browser testing.
+- [x] **Milestone 6 — Local Persistence & Worker Recovery:** Background persistence across popup close and worker suspension.
+- [x] **Milestone 7 — Deferred Navigation:** Optional "Don't load until selected" managed tabs.
+- [x] **Milestone 8 — Final Polish & Accessibility:** Keyboard navigation, full manual cross-browser testing.

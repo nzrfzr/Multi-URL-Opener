@@ -106,4 +106,63 @@ describe('TabManager: tab creation and lifecycle', () => {
     assert.strictEqual(timeoutEvent.status, ROW_STATUS.TIMED_OUT);
     assert.strictEqual(manager.activeCount, 0);
   });
+
+  it('handles deferred navigation (Don\'t load until selected)', async () => {
+    const events = [];
+    let updatedTargetUrl = null;
+    let activatedListener = null;
+
+    const mockAdapter = {
+      runtime: {
+        getURL: (path) => `chrome-extension://test/${path}`
+      },
+      tabs: {
+        create: async ({ url, active }) => {
+          assert.strictEqual(active, false);
+          assert.ok(url.includes('placeholder.html'));
+          return { id: 404, status: 'complete' };
+        },
+        update: async (tabId, { url }) => {
+          assert.strictEqual(tabId, 404);
+          updatedTargetUrl = url;
+          return { id: tabId, status: 'loading' };
+        },
+        onUpdated: { addListener: () => {}, removeListener: () => {} },
+        onRemoved: { addListener: () => {}, removeListener: () => {} },
+        onActivated: {
+          addListener: (fn) => { activatedListener = fn; },
+          removeListener: () => {}
+        }
+      }
+    };
+
+    const manager = new TabManager({
+      adapter: mockAdapter,
+      onTabStatusChange: (evt) => events.push(evt)
+    });
+
+    const res = await manager.openTab('row_4', 'https://destination.com/article', {
+      deferUntilSelected: true
+    });
+
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.deferred, true);
+    assert.strictEqual(manager.activeCount, 0, 'Deferred tab must not count toward active navigations');
+    assert.strictEqual(manager.waitingCount, 1);
+
+    const waitingEvent = events.find(e => e.type === 'tab_waiting');
+    assert.ok(waitingEvent);
+    assert.strictEqual(waitingEvent.status, ROW_STATUS.WAITING_FOR_SELECTION);
+
+    // User activates the tab
+    activatedListener({ tabId: 404 });
+
+    assert.strictEqual(updatedTargetUrl, 'https://destination.com/article');
+    assert.strictEqual(manager.waitingCount, 0);
+    assert.strictEqual(manager.activeCount, 1, 'Now it counts toward active navigations');
+
+    const activatedEvent = events.find(e => e.type === 'tab_activated_loading');
+    assert.ok(activatedEvent);
+    assert.strictEqual(activatedEvent.status, ROW_STATUS.LOADING);
+  });
 });

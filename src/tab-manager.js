@@ -1,6 +1,7 @@
 /**
  * Multi URL Opener - Tab Manager
- * Handles tab creation, mapping between tab IDs and row IDs, and tab lifecycle events.
+ * Handles tab creation, mapping between tab IDs and row IDs, tab lifecycle events,
+ * and deferred navigation ("Don't load until selected").
  * by nzrfzr
  */
 
@@ -20,6 +21,8 @@ export class TabManager {
     // Maps:
     // tabId -> { rowId, url, status, startedAt, timerId }
     this.activeTabs = new Map();
+    // tabId -> { rowId, targetUrl, timeoutSeconds } (deferred tabs waiting for selection)
+    this.waitingTabs = new Map();
     // rowId -> tabId
     this.rowToTab = new Map();
 
@@ -56,6 +59,22 @@ export class TabManager {
     // Listen for tab closure
     if (typeof this.adapter.tabs.onRemoved?.addListener === 'function') {
       this.adapter.tabs.onRemoved.addListener((tabId) => {
+        // 1. Check if it was a waiting tab
+        if (this.waitingTabs.has(tabId)) {
+          const waiting = this.waitingTabs.get(tabId);
+          this.waitingTabs.delete(tabId);
+          this.rowToTab.delete(waiting.rowId);
+          this.onTabStatusChange({
+            type: 'tab_closed_early',
+            rowId: waiting.rowId,
+            tabId,
+            status: ROW_STATUS.STOPPED,
+            error: 'Waiting tab closed before selection'
+          });
+          return;
+        }
+
+        // 2. Check if it was an active loading tab
         const tracked = this.activeTabs.get(tabId);
         if (!tracked) return;
 
@@ -76,18 +95,78 @@ export class TabManager {
         this.rowToTab.delete(tracked.rowId);
       });
     }
+
+    // Listen for tab activation (for deferred navigation "Don't load until selected")
+    if (typeof this.adapter.tabs.onActivated?.addListener === 'function') {
+      this.adapter.tabs.onActivated.addListener(({ tabId }) => {
+        this.handleTabActivation(tabId);
+      });
+    }
+  }
+
+  /**
+   * Handle user activating a tab (triggers deferred navigation if waiting)
+   * @param {number} tabId 
+   */
+  async handleTabActivation(tabId) {
+    if (!this.waitingTabs.has(tabId)) return;
+
+    const waiting = this.waitingTabs.get(tabId);
+    this.waitingTabs.delete(tabId);
+
+    const { rowId, targetUrl, timeoutSeconds } = waiting;
+
+    // Track as actively loading now that user activated it
+    const tracked = {
+      rowId,
+      url: targetUrl,
+      status: ROW_STATUS.LOADING,
+      startedAt: Date.now(),
+      timerId: null
+    };
+
+    tracked.timerId = setTimeout(() => {
+      this._handleTabTimeout(tabId, tracked);
+    }, (timeoutSeconds || 30) * 1000);
+
+    this.activeTabs.set(tabId, tracked);
+
+    this.onTabStatusChange({
+      type: 'tab_activated_loading',
+      rowId,
+      tabId,
+      status: ROW_STATUS.LOADING
+    });
+
+    try {
+      await this.adapter.tabs.update(tabId, { url: targetUrl });
+    } catch (err) {
+      console.warn(`[TabManager] Error navigating deferred tab ${tabId}:`, err);
+      this._clearTimeout(tracked);
+      this.activeTabs.delete(tabId);
+      this.rowToTab.delete(rowId);
+      this.onTabStatusChange({
+        type: 'tab_create_failed',
+        rowId,
+        tabId,
+        status: ROW_STATUS.FAILED,
+        error: err.message || 'Deferred navigation failed'
+      });
+    }
   }
 
   /**
    * Opens a URL in a new background tab and tracks its lifecycle.
+   * If deferUntilSelected is true, opens placeholder and waits for activation.
    * @param {string} rowId 
    * @param {string} url 
-   * @param {{ openInBackground?: boolean, timeoutSeconds?: number }} [options={}]
-   * @returns {Promise<{ success: boolean, tabId?: number, error?: string }>}
+   * @param {{ openInBackground?: boolean, timeoutSeconds?: number, deferUntilSelected?: boolean }} [options={}]
+   * @returns {Promise<{ success: boolean, tabId?: number, deferred?: boolean, error?: string }>}
    */
   async openTab(rowId, url, options = {}) {
     const openInBackground = options.openInBackground !== false; // default true
     const timeoutSeconds = options.timeoutSeconds || 30;
+    const deferUntilSelected = Boolean(options.deferUntilSelected);
 
     try {
       // 1. Notify that tab creation has started
@@ -98,9 +177,17 @@ export class TabManager {
         status: ROW_STATUS.CREATING_TAB
       });
 
-      // 2. Create the tab via adapter
+      // 2. Determine initial URL (placeholder if deferred)
+      let initialUrl = url;
+      if (deferUntilSelected) {
+        initialUrl = typeof this.adapter?.runtime?.getURL === 'function'
+          ? this.adapter.runtime.getURL(`placeholder/placeholder.html?target=${encodeURIComponent(url)}`)
+          : 'about:blank';
+      }
+
+      // 3. Create tab
       const tab = await this.adapter.tabs.create({
-        url,
+        url: initialUrl,
         active: !openInBackground
       });
 
@@ -109,8 +196,21 @@ export class TabManager {
       }
 
       const tabId = tab.id;
+      this.rowToTab.set(rowId, tabId);
 
-      // 3. Track the active tab
+      // 4. Handle deferred vs direct
+      if (deferUntilSelected) {
+        this.waitingTabs.set(tabId, { rowId, targetUrl: url, timeoutSeconds });
+        this.onTabStatusChange({
+          type: 'tab_waiting',
+          rowId,
+          tabId,
+          status: ROW_STATUS.WAITING_FOR_SELECTION
+        });
+        return { success: true, tabId, deferred: true };
+      }
+
+      // Direct navigation tracking
       const tracked = {
         rowId,
         url,
@@ -119,15 +219,12 @@ export class TabManager {
         timerId: null
       };
 
-      // Set timeout fallback
       tracked.timerId = setTimeout(() => {
         this._handleTabTimeout(tabId, tracked);
       }, timeoutSeconds * 1000);
 
       this.activeTabs.set(tabId, tracked);
-      this.rowToTab.set(rowId, tabId);
 
-      // 4. Notify that tab was opened and is now loading
       this.onTabStatusChange({
         type: 'tab_created',
         rowId,
@@ -135,7 +232,6 @@ export class TabManager {
         status: ROW_STATUS.LOADING
       });
 
-      // If browser already marked it complete immediately
       if (tab.status === 'complete') {
         this._handleTabComplete(tabId, tracked);
       }
@@ -206,10 +302,19 @@ export class TabManager {
 
   /**
    * Number of currently active navigations in progress
+   * Waiting tabs do not count towards active navigation count.
    * @returns {number}
    */
   get activeCount() {
     return this.activeTabs.size;
+  }
+
+  /**
+   * Number of tabs currently waiting for user selection
+   * @returns {number}
+   */
+  get waitingCount() {
+    return this.waitingTabs.size;
   }
 
   /**
@@ -220,6 +325,7 @@ export class TabManager {
       this._clearTimeout(tracked);
     }
     this.activeTabs.clear();
+    this.waitingTabs.clear();
     this.rowToTab.clear();
   }
 }

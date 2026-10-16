@@ -70,6 +70,14 @@ export const browserAdapter = {
         rawApi?.runtime?.onMessage?.removeListener(listener);
       }
     },
+    onStartup: {
+      addListener(listener) {
+        rawApi?.runtime?.onStartup?.addListener(listener);
+      },
+      removeListener(listener) {
+        rawApi?.runtime?.onStartup?.removeListener(listener);
+      }
+    },
     getURL(path) {
       return rawApi?.runtime?.getURL(path) || path;
     }

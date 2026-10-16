@@ -239,11 +239,13 @@ export class QueueController {
 
     const openInBackground = this.preferences.openInBackground;
     const timeoutSeconds = this.preferences.timeoutSeconds;
+    const deferUntilSelected = this.preferences.deferUntilSelected;
 
     try {
       const res = await this.tabManager.openTab(rowId, row.url, {
         openInBackground,
-        timeoutSeconds
+        timeoutSeconds,
+        deferUntilSelected
       });
 
       if (res.success && res.tabId != null) {
@@ -252,7 +254,13 @@ export class QueueController {
           this.session.openedCount += 1;
         }
         row.tabId = res.tabId;
-        this._updateRowStatus(rowId, ROW_STATUS.LOADING, { tabId: res.tabId });
+        if (res.deferred) {
+          this.activeNavigations.delete(rowId);
+          this._updateRowStatus(rowId, ROW_STATUS.WAITING_FOR_SELECTION, { tabId: res.tabId });
+          this._onSlotFreed();
+        } else {
+          this._updateRowStatus(rowId, ROW_STATUS.LOADING, { tabId: res.tabId });
+        }
       }
     } catch (err) {
       console.warn(`[QueueController] Error opening row ${rowId}:`, err);
@@ -272,7 +280,18 @@ export class QueueController {
       if (error) row.error = error;
     }
 
-    if (type === 'tab_created') {
+    if (type === 'tab_waiting') {
+      if (tabId != null && !this.session.createdTabIds.includes(tabId)) {
+        this.session.createdTabIds.push(tabId);
+        this.session.openedCount += 1;
+      }
+      this.activeNavigations.delete(rowId);
+      this._updateRowStatus(rowId, ROW_STATUS.WAITING_FOR_SELECTION, { tabId });
+      this._onSlotFreed();
+    } else if (type === 'tab_activated_loading') {
+      this.activeNavigations.add(rowId);
+      this._updateRowStatus(rowId, ROW_STATUS.LOADING, { tabId });
+    } else if (type === 'tab_created') {
       if (tabId != null && !this.session.createdTabIds.includes(tabId)) {
         this.session.createdTabIds.push(tabId);
         this.session.openedCount += 1;

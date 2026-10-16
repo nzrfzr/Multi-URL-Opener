@@ -752,6 +752,14 @@ function setStatus(statusKey) {
   if (!elements.sessionStatusPill || !elements.sessionStatusText) return;
 
   elements.sessionStatusPill.className = 'status-pill';
+  elements.sessionStatusPill.removeAttribute('title');
+
+  if (state.session?.interrupted) {
+    elements.sessionStatusPill.classList.add('status-error');
+    elements.sessionStatusText.textContent = 'Interrupted';
+    elements.sessionStatusPill.title = 'Previous session was interrupted by browser shutdown or restart';
+    return;
+  }
 
   switch (statusKey) {
     case SESSION_STATUS.RUNNING:

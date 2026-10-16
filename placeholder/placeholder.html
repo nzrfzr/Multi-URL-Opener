@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Waiting for selection - Multi URL Opener</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #FFFFFF;
+      color: #002D5B;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+      text-align: center;
+    }
+    .card {
+      max-width: 480px;
+      padding: 32px 24px;
+      border: 1px solid #E5E9ED;
+      border-radius: 8px;
+      background-color: #FAFCFE;
+      box-shadow: 0 2px 8px rgba(0, 45, 91, 0.04);
+    }
+    .icon {
+      width: 48px;
+      height: 48px;
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #002D5B;
+    }
+    p {
+      font-size: 13px;
+      color: #687785;
+      line-height: 1.5;
+      margin-bottom: 16px;
+    }
+    .url-preview {
+      display: inline-block;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: monospace;
+      font-size: 12px;
+      padding: 6px 12px;
+      background-color: #FFFFFF;
+      border: 1px solid #E5E9ED;
+      border-radius: 4px;
+      color: #00AEEF;
+    }
+    .tip {
+      font-size: 11px;
+      color: #8E9BA7;
+      margin-top: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <img src="../icons/icon-48.png" alt="" class="icon">
+    <h1>Tab Waiting for Selection</h1>
+    <p>This tab is managed by <strong>Multi URL Opener</strong> and will navigate to its destination as soon as it is selected.</p>
+    <div id="urlPreview" class="url-preview">Destination pending...</div>
+    <div class="tip">Deferred navigation saves memory and network bandwidth.</div>
+  </div>
+
+  <script>
+    // Extract target URL from query parameter if present
+    const params = new URLSearchParams(window.location.search);
+    const target = params.get('target');
+    if (target) {
+      document.getElementById('urlPreview').textContent = target;
+    }
+  </script>
+</body>
+</html>
