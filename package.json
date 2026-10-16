@@ -1,0 +1,11 @@
+{
+  "name": "multi-url-opener",
+  "version": "0.1.0",
+  "description": "A compact, local-first browser extension to collect, validate, and open multiple URLs with controlled concurrency and intervals.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  },
+  "author": "nzrfzr",
+  "license": "MIT"
+}

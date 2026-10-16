@@ -3,7 +3,7 @@
 **Developer:** `nzrfzr`  
 **Target browsers:** Google Chrome & Mozilla Firefox  
 **License / Type:** Personal, local-first browser extension  
-**Status:** Milestone 1 (Extension Shell) completed  
+**Status:** Milestone 2 (URL Parsing & List Management) completed  
 
 ---
 
@@ -58,7 +58,7 @@ This extension requests only the minimum required permissions:
 ## Roadmap & Milestones
 
 - [x] **Milestone 1 — Extension Shell:** Manifest V3 cross-browser setup, compact white UI, header, status pill, background messaging handshake, and icons.
-- [ ] **Milestone 2 — URL Parsing & List Management:** Mixed-text extraction, HTTP/HTTPS validation, duplicate detection, row selection, metrics.
+- [x] **Milestone 2 — URL Parsing & List Management:** Mixed-text extraction, HTTP/HTTPS validation, duplicate detection, row selection, metrics.
 - [ ] **Milestone 3 — Basic Tab Creation:** Background tab opening, tab ID mapping, load vs. creation tracking.
 - [ ] **Milestone 4 — Queue Modes & Concurrency:** Open All, At Interval, After Load with concurrency limit (1–10) and timeout.
 - [ ] **Milestone 5 — Queue Controls & Progress:** Pause, resume, stop, and real-time progress indicators.
